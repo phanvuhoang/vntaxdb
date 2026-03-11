@@ -1,0 +1,860 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VietTax Legal DB</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        primary: '#028a39',
+                        'primary-dark': '#026b2d',
+                        'primary-light': '#e6f5ec',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .loader{width:20px;height:20px;border:3px solid #e6f5ec;border-top-color:#028a39;border-radius:50%;animation:spin .6s linear infinite}
+        @keyframes spin{to{transform:rotate(360deg)}}
+        .toast{animation:slideIn .3s ease-out}
+        @keyframes slideIn{from{transform:translateY(-100%);opacity:0}to{transform:translateY(0);opacity:1}}
+        .chat-msg{animation:fadeIn .2s ease-out}
+        @keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+        .badge{display:inline-block;padding:2px 8px;border-radius:9999px;font-size:0.7rem;font-weight:600}
+        .tab-active{border-bottom:2px solid #028a39;color:#028a39;font-weight:600}
+        [x-cloak]{display:none!important}
+        .markdown h2{font-size:1.1rem;font-weight:700;margin:12px 0 6px;color:#028a39}
+        .markdown p{margin:4px 0}
+        .markdown ul{list-style:disc;padding-left:1.2rem;margin:4px 0}
+        .markdown li{margin:2px 0}
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+<div id="app">
+    <!-- Toast container -->
+    <div id="toasts" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <!-- Login Modal -->
+    <div id="loginModal" class="fixed inset-0 bg-black/50 z-50 flex items-center justify-center">
+        <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-sm">
+            <div class="flex items-center gap-3 mb-6">
+                <div class="w-10 h-10 rounded-lg bg-primary flex items-center justify-center">
+                    <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                    </svg>
+                </div>
+                <h2 class="text-xl font-bold text-gray-800">VietTax Legal DB</h2>
+            </div>
+            <form id="loginForm" class="space-y-4">
+                <input id="loginUser" type="text" placeholder="Tên đăng nhập" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none" required>
+                <input id="loginPass" type="password" placeholder="Mật khẩu" class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none" required>
+                <button type="submit" class="w-full py-2.5 bg-primary text-white rounded-lg font-semibold hover:bg-primary-dark transition">Đăng nhập</button>
+                <p id="loginError" class="text-red-500 text-sm hidden"></p>
+            </form>
+        </div>
+    </div>
+
+    <!-- Main App -->
+    <div id="mainApp" class="hidden">
+        <!-- Header -->
+        <header class="bg-white border-b border-gray-200 sticky top-0 z-40">
+            <div class="max-w-screen-2xl mx-auto px-4 h-14 flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/>
+                        </svg>
+                    </div>
+                    <span class="font-bold text-gray-800 text-lg hidden sm:block">VietTax Legal DB</span>
+                </div>
+                <nav class="flex items-center gap-1">
+                    <button onclick="switchTab('search')" id="navSearch" class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Tra cứu</button>
+                    <button onclick="switchTab('chat')" id="navChat" class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition">Chatbox</button>
+                    <button onclick="switchTab('admin')" id="navAdmin" class="px-3 py-1.5 rounded-lg text-sm font-medium text-gray-600 hover:bg-gray-100 transition hidden">Admin</button>
+                </nav>
+                <div class="flex items-center gap-2">
+                    <span id="userBadge" class="text-sm text-gray-500"></span>
+                    <button onclick="logout()" class="text-sm text-gray-400 hover:text-red-500 transition">Thoát</button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Search Tab -->
+        <div id="tabSearch" class="max-w-screen-2xl mx-auto flex">
+            <!-- Sidebar -->
+            <aside class="w-64 shrink-0 bg-white border-r border-gray-200 min-h-[calc(100vh-3.5rem)] p-4 hidden lg:block">
+                <h3 class="font-semibold text-gray-700 text-sm mb-3">Bộ lọc</h3>
+
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 mb-1.5 block">Loại văn bản</label>
+                    <div class="flex flex-wrap gap-1.5" id="filterLoai">
+                        <button onclick="toggleFilter('loai','')" class="filter-btn active px-2.5 py-1 rounded-full text-xs border" data-value="">Tất cả</button>
+                        <button onclick="toggleFilter('loai','Luật')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="Luật">Luật</button>
+                        <button onclick="toggleFilter('loai','NĐ')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="NĐ">NĐ</button>
+                        <button onclick="toggleFilter('loai','TT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="TT">TT</button>
+                        <button onclick="toggleFilter('loai','QĐ')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="QĐ">QĐ</button>
+                        <button onclick="toggleFilter('loai','NQ')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="NQ">NQ</button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 mb-1.5 block">Sắc thuế</label>
+                    <div class="flex flex-wrap gap-1.5" id="filterSacThue">
+                        <button onclick="toggleFilter('sac_thue','')" class="filter-btn active px-2.5 py-1 rounded-full text-xs border" data-value="">Tất cả</button>
+                        <button onclick="toggleFilter('sac_thue','CIT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="CIT">CIT</button>
+                        <button onclick="toggleFilter('sac_thue','VAT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="VAT">VAT</button>
+                        <button onclick="toggleFilter('sac_thue','PIT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="PIT">PIT</button>
+                        <button onclick="toggleFilter('sac_thue','FCT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="FCT">FCT</button>
+                        <button onclick="toggleFilter('sac_thue','SCT')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="SCT">SCT</button>
+                        <button onclick="toggleFilter('sac_thue','XNK')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="XNK">XNK</button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 mb-1.5 block">Hiệu lực</label>
+                    <div class="flex flex-wrap gap-1.5" id="filterHieuLuc">
+                        <button onclick="toggleFilter('tinh_trang','')" class="filter-btn active px-2.5 py-1 rounded-full text-xs border" data-value="">Tất cả</button>
+                        <button onclick="toggleFilter('tinh_trang','con_hieu_luc')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="con_hieu_luc">Còn HL</button>
+                        <button onclick="toggleFilter('tinh_trang','het_hieu_luc')" class="filter-btn px-2.5 py-1 rounded-full text-xs border" data-value="het_hieu_luc">Hết HL</button>
+                    </div>
+                </div>
+
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 mb-1.5 block">Năm ban hành</label>
+                    <select id="filterYear" onchange="applyFilters()" class="w-full px-3 py-1.5 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none">
+                        <option value="">Tất cả</option>
+                    </select>
+                </div>
+
+                <div class="pt-3 border-t">
+                    <button onclick="resetFilters()" class="w-full py-1.5 text-sm text-gray-500 hover:text-primary transition">Xóa bộ lọc</button>
+                </div>
+            </aside>
+
+            <!-- Main content -->
+            <main class="flex-1 p-4 lg:p-6">
+                <!-- Search bar -->
+                <div class="mb-6">
+                    <div class="relative">
+                        <svg class="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+                        </svg>
+                        <input id="searchInput" type="text" placeholder="Tìm kiếm văn bản pháp luật thuế..."
+                            class="w-full pl-12 pr-4 py-3 border border-gray-300 rounded-xl text-base focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none shadow-sm"
+                            onkeydown="if(event.key==='Enter')doSearch()">
+                        <button onclick="doSearch()" class="absolute right-2 top-1/2 -translate-y-1/2 px-4 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition">Tìm</button>
+                    </div>
+                    <!-- Mobile filter toggle -->
+                    <button onclick="document.getElementById('mobileFilters').classList.toggle('hidden')" class="mt-2 text-sm text-primary font-medium lg:hidden">Bộ lọc</button>
+                    <div id="mobileFilters" class="hidden lg:hidden mt-2 p-3 bg-white rounded-lg border space-y-2">
+                        <select id="mFilterLoai" onchange="applyFilters()" class="w-full px-2 py-1 border rounded text-sm">
+                            <option value="">Loại: Tất cả</option>
+                            <option value="Luật">Luật</option><option value="NĐ">NĐ</option><option value="TT">TT</option>
+                        </select>
+                        <select id="mFilterSacThue" onchange="applyFilters()" class="w-full px-2 py-1 border rounded text-sm">
+                            <option value="">Sắc thuế: Tất cả</option>
+                            <option value="CIT">CIT</option><option value="VAT">VAT</option><option value="PIT">PIT</option><option value="FCT">FCT</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Results info -->
+                <div id="searchInfo" class="mb-3 text-sm text-gray-500 hidden">
+                    <span id="resultCount"></span> kết quả
+                    <span id="searchLoading" class="hidden ml-2"><span class="loader inline-block align-middle"></span></span>
+                </div>
+
+                <!-- Results list -->
+                <div id="resultsList" class="space-y-3"></div>
+
+                <!-- Pagination -->
+                <div id="pagination" class="mt-6 flex items-center justify-center gap-2 hidden">
+                    <button onclick="prevPage()" id="btnPrev" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-30" disabled>Trước</button>
+                    <span id="pageInfo" class="text-sm text-gray-500"></span>
+                    <button onclick="nextPage()" id="btnNext" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 disabled:opacity-30">Sau</button>
+                </div>
+            </main>
+        </div>
+
+        <!-- Chat Tab -->
+        <div id="tabChat" class="hidden max-w-screen-lg mx-auto p-4 lg:p-6">
+            <div class="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden" style="height:calc(100vh - 7rem)">
+                <div class="h-full flex flex-col">
+                    <!-- Chat header -->
+                    <div class="px-4 py-3 border-b bg-primary-light">
+                        <h3 class="font-semibold text-primary">AI Tư vấn Thuế</h3>
+                        <p class="text-xs text-gray-500">Đặt câu hỏi về luật thuế Việt Nam</p>
+                    </div>
+
+                    <!-- Messages -->
+                    <div id="chatMessages" class="flex-1 overflow-y-auto p-4 space-y-4">
+                        <div class="chat-msg flex gap-3">
+                            <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                                <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                            </div>
+                            <div class="bg-gray-50 rounded-xl rounded-tl-none p-3 text-sm text-gray-700 max-w-[85%]">
+                                Xin chào! Tôi là trợ lý AI tư vấn thuế. Hãy đặt câu hỏi về luật thuế Việt Nam — tôi sẽ trích dẫn văn bản pháp luật và công văn hướng dẫn cụ thể.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Input -->
+                    <div class="p-3 border-t bg-gray-50">
+                        <div class="flex gap-2">
+                            <input id="chatInput" type="text" placeholder="Đặt câu hỏi về thuế..."
+                                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-xl text-sm focus:ring-2 focus:ring-primary/30 focus:border-primary outline-none"
+                                onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendChat()}">
+                            <button onclick="sendChat()" id="btnSendChat" class="px-4 py-2.5 bg-primary text-white rounded-xl text-sm font-medium hover:bg-primary-dark transition flex items-center gap-1.5">
+                                <span>Gửi</span>
+                                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"/></svg>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Admin Tab -->
+        <div id="tabAdmin" class="hidden max-w-screen-lg mx-auto p-4 lg:p-6">
+            <h2 class="text-xl font-bold text-gray-800 mb-4">Quản trị hệ thống</h2>
+
+            <!-- Stats -->
+            <div id="adminStats" class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <div class="bg-white rounded-xl border p-4">
+                    <div class="text-2xl font-bold text-primary" id="statDocs">-</div>
+                    <div class="text-sm text-gray-500">Văn bản pháp luật</div>
+                </div>
+                <div class="bg-white rounded-xl border p-4">
+                    <div class="text-2xl font-bold text-primary" id="statCV">-</div>
+                    <div class="text-sm text-gray-500">Công văn</div>
+                </div>
+                <div class="bg-white rounded-xl border p-4">
+                    <div class="text-2xl font-bold text-primary" id="statUsers">-</div>
+                    <div class="text-sm text-gray-500">Người dùng</div>
+                </div>
+            </div>
+
+            <!-- Crawl -->
+            <div class="bg-white rounded-xl border p-4 mb-6">
+                <h3 class="font-semibold text-gray-700 mb-3">Crawl văn bản từ vbpl.vn</h3>
+                <div class="flex gap-2 items-end flex-wrap">
+                    <div>
+                        <label class="text-xs text-gray-500">Loại VB</label>
+                        <select id="crawlLoai" class="block px-3 py-1.5 border rounded-lg text-sm">
+                            <option>Luật</option><option>Nghị định</option><option>Thông tư</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-xs text-gray-500">Số trang</label>
+                        <input id="crawlPages" type="number" value="3" min="1" max="10" class="block w-20 px-3 py-1.5 border rounded-lg text-sm">
+                    </div>
+                    <button onclick="runCrawl()" id="btnCrawl" class="px-4 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition">Bắt đầu crawl</button>
+                </div>
+                <div id="crawlResult" class="mt-2 text-sm text-gray-500 hidden"></div>
+            </div>
+
+            <!-- Users -->
+            <div class="bg-white rounded-xl border p-4 mb-6">
+                <h3 class="font-semibold text-gray-700 mb-3">Quản lý người dùng</h3>
+                <div class="flex gap-2 mb-4 flex-wrap">
+                    <input id="newUsername" placeholder="Username" class="px-3 py-1.5 border rounded-lg text-sm">
+                    <input id="newEmail" placeholder="Email" class="px-3 py-1.5 border rounded-lg text-sm">
+                    <input id="newPassword" type="password" placeholder="Password" class="px-3 py-1.5 border rounded-lg text-sm">
+                    <select id="newRole" class="px-3 py-1.5 border rounded-lg text-sm">
+                        <option value="user">User</option><option value="admin">Admin</option>
+                    </select>
+                    <button onclick="createUser()" class="px-4 py-1.5 bg-primary text-white rounded-lg text-sm font-medium hover:bg-primary-dark transition">Thêm</button>
+                </div>
+                <div id="usersList" class="overflow-x-auto">
+                    <table class="w-full text-sm">
+                        <thead><tr class="border-b text-left text-gray-500"><th class="py-2 pr-4">Username</th><th class="py-2 pr-4">Email</th><th class="py-2 pr-4">Role</th><th class="py-2">Ngày tạo</th></tr></thead>
+                        <tbody id="usersTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Detail Modal -->
+    <div id="detailModal" class="fixed inset-0 bg-black/50 z-50 hidden flex items-start justify-center pt-8 pb-8 overflow-y-auto">
+        <div class="bg-white rounded-xl shadow-2xl w-full max-w-3xl mx-4 overflow-hidden">
+            <div class="px-6 py-4 border-b flex items-start justify-between">
+                <div>
+                    <h2 id="modalSoHieu" class="text-lg font-bold text-gray-800"></h2>
+                    <p id="modalTen" class="text-sm text-gray-500 mt-0.5"></p>
+                </div>
+                <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-xl">&times;</button>
+            </div>
+            <div class="px-6 py-2 border-b flex gap-4 text-sm">
+                <button onclick="switchModalTab('info')" id="mtInfo" class="py-2 tab-active">Thông tin</button>
+                <button onclick="switchModalTab('content')" id="mtContent" class="py-2 text-gray-500 hover:text-primary">Nội dung</button>
+                <button onclick="switchModalTab('relations')" id="mtRelations" class="py-2 text-gray-500 hover:text-primary">VB liên quan</button>
+            </div>
+            <div class="px-6 py-4 max-h-[60vh] overflow-y-auto">
+                <div id="modalTabInfo"></div>
+                <div id="modalTabContent" class="hidden"></div>
+                <div id="modalTabRelations" class="hidden"></div>
+            </div>
+            <div class="px-6 py-3 border-t flex gap-2 justify-end">
+                <button onclick="copyLink()" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 transition">📋 Copy link</button>
+                <a id="modalTvpl" href="#" target="_blank" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 transition hidden">🔗 TVPL</a>
+                <button onclick="exportDocWord()" class="px-3 py-1.5 border rounded-lg text-sm hover:bg-gray-50 transition">📄 Xuất Word</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ── State ──
+let token = localStorage.getItem('vntax_token');
+let currentUser = null;
+let currentTab = 'search';
+let filters = { loai: '', sac_thue: '', tinh_trang: '', year: '' };
+let searchPage = 0;
+let searchTotal = 0;
+let currentDoc = null;
+const PAGE_SIZE = 50;
+
+// ── Init ──
+document.addEventListener('DOMContentLoaded', () => {
+    if (token) {
+        checkAuth();
+    } else {
+        showLogin();
+    }
+    populateYears();
+});
+
+function populateYears() {
+    const sel = document.getElementById('filterYear');
+    for (let y = 2026; y >= 1990; y--) {
+        const opt = document.createElement('option');
+        opt.value = y; opt.textContent = y;
+        sel.appendChild(opt);
+    }
+}
+
+// ── Auth ──
+async function checkAuth() {
+    try {
+        const res = await api('/auth/me');
+        currentUser = res;
+        showApp();
+    } catch {
+        localStorage.removeItem('vntax_token');
+        token = null;
+        showLogin();
+    }
+}
+
+function showLogin() {
+    document.getElementById('loginModal').classList.remove('hidden');
+    document.getElementById('mainApp').classList.add('hidden');
+}
+
+function showApp() {
+    document.getElementById('loginModal').classList.add('hidden');
+    document.getElementById('mainApp').classList.remove('hidden');
+    document.getElementById('userBadge').textContent = currentUser.username;
+    if (currentUser.role === 'admin') {
+        document.getElementById('navAdmin').classList.remove('hidden');
+    }
+    switchTab('search');
+    doSearch();
+}
+
+document.getElementById('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const username = document.getElementById('loginUser').value;
+    const password = document.getElementById('loginPass').value;
+    try {
+        const res = await fetch('/auth/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ username, password })
+        });
+        if (!res.ok) throw new Error('Login failed');
+        const data = await res.json();
+        token = data.access_token;
+        localStorage.setItem('vntax_token', token);
+        currentUser = { username: data.username, role: data.role };
+        showApp();
+    } catch {
+        const el = document.getElementById('loginError');
+        el.textContent = 'Sai tên đăng nhập hoặc mật khẩu';
+        el.classList.remove('hidden');
+    }
+});
+
+function logout() {
+    localStorage.removeItem('vntax_token');
+    token = null;
+    currentUser = null;
+    showLogin();
+}
+
+// ── API helper ──
+async function api(path, opts = {}) {
+    const headers = { 'Content-Type': 'application/json' };
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    const res = await fetch(path, { ...opts, headers: { ...headers, ...opts.headers } });
+    if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    return res.json();
+}
+
+// ── Tabs ──
+function switchTab(tab) {
+    currentTab = tab;
+    ['search', 'chat', 'admin'].forEach(t => {
+        document.getElementById(`tab${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('hidden', t !== tab);
+        document.getElementById(`nav${t.charAt(0).toUpperCase()+t.slice(1)}`)?.classList.toggle('bg-primary/10', t === tab);
+        document.getElementById(`nav${t.charAt(0).toUpperCase()+t.slice(1)}`)?.classList.toggle('text-primary', t === tab);
+    });
+    if (tab === 'admin' && currentUser?.role === 'admin') loadAdmin();
+}
+
+// ── Filters ──
+function toggleFilter(type, value) {
+    filters[type] = value;
+    // Update button states
+    const containerId = type === 'loai' ? 'filterLoai' : type === 'sac_thue' ? 'filterSacThue' : 'filterHieuLuc';
+    document.querySelectorAll(`#${containerId} .filter-btn`).forEach(btn => {
+        const active = btn.dataset.value === value;
+        btn.classList.toggle('bg-primary', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('border-primary', active);
+        btn.classList.toggle('active', active);
+    });
+    searchPage = 0;
+    doSearch();
+}
+
+function applyFilters() {
+    filters.year = document.getElementById('filterYear').value;
+    // Also check mobile filters
+    const mLoai = document.getElementById('mFilterLoai');
+    const mSac = document.getElementById('mFilterSacThue');
+    if (mLoai && mLoai.value) filters.loai = mLoai.value;
+    if (mSac && mSac.value) filters.sac_thue = mSac.value;
+    searchPage = 0;
+    doSearch();
+}
+
+function resetFilters() {
+    filters = { loai: '', sac_thue: '', tinh_trang: '', year: '' };
+    document.getElementById('filterYear').value = '';
+    document.querySelectorAll('.filter-btn').forEach(btn => {
+        const active = btn.dataset.value === '';
+        btn.classList.toggle('bg-primary', active);
+        btn.classList.toggle('text-white', active);
+        btn.classList.toggle('border-primary', active);
+    });
+    searchPage = 0;
+    doSearch();
+}
+
+// ── Search ──
+async function doSearch() {
+    const q = document.getElementById('searchInput').value;
+    const params = new URLSearchParams();
+    if (q) params.set('q', q);
+    if (filters.loai) params.set('loai', filters.loai);
+    if (filters.sac_thue) params.set('sac_thue', filters.sac_thue);
+    if (filters.tinh_trang) params.set('tinh_trang', filters.tinh_trang);
+    if (filters.year) params.set('year', filters.year);
+    params.set('limit', PAGE_SIZE);
+    params.set('offset', searchPage * PAGE_SIZE);
+
+    document.getElementById('searchLoading')?.classList.remove('hidden');
+    document.getElementById('searchInfo').classList.remove('hidden');
+
+    try {
+        const data = await api(`/api/documents?${params}`);
+        searchTotal = data.total;
+        document.getElementById('resultCount').textContent = searchTotal;
+        renderResults(data.items);
+        renderPagination();
+    } catch (err) {
+        toast('Lỗi tìm kiếm: ' + err.message, 'error');
+    } finally {
+        document.getElementById('searchLoading')?.classList.add('hidden');
+    }
+}
+
+function renderResults(items) {
+    const el = document.getElementById('resultsList');
+    if (!items.length) {
+        el.innerHTML = '<div class="text-center py-12 text-gray-400">Không tìm thấy kết quả nào</div>';
+        return;
+    }
+    el.innerHTML = items.map(d => {
+        const loaiBadge = getLoaiBadge(d.loai);
+        const statusBadge = getStatusBadge(d.tinh_trang);
+        const sacTags = (d.sac_thue || []).map(s => `<span class="badge bg-blue-50 text-blue-600">${s}</span>`).join('');
+        const date = d.ngay_ban_hanh ? new Date(d.ngay_ban_hanh).toLocaleDateString('vi-VN') : '';
+        return `
+        <div class="bg-white rounded-xl border border-gray-200 p-4 hover:border-primary/40 hover:shadow-sm transition cursor-pointer" onclick="openDetail('${escHtml(d.so_hieu)}')">
+            <div class="flex items-start justify-between gap-3">
+                <div class="flex-1 min-w-0">
+                    <div class="flex items-center gap-2 mb-1 flex-wrap">
+                        <span class="font-semibold text-primary text-sm">${escHtml(d.so_hieu)}</span>
+                        ${loaiBadge}
+                        ${statusBadge}
+                    </div>
+                    <p class="text-sm text-gray-700 line-clamp-2">${escHtml(d.ten)}</p>
+                    <div class="flex items-center gap-2 mt-2 flex-wrap">
+                        ${sacTags}
+                        ${date ? `<span class="text-xs text-gray-400">${date}</span>` : ''}
+                        ${d.co_quan ? `<span class="text-xs text-gray-400">• ${escHtml(d.co_quan)}</span>` : ''}
+                    </div>
+                    ${d.tom_tat ? `<p class="text-xs text-gray-400 mt-1 line-clamp-1">${escHtml(d.tom_tat)}</p>` : ''}
+                </div>
+            </div>
+        </div>`;
+    }).join('');
+}
+
+function getLoaiBadge(loai) {
+    const colors = { 'Luật': 'bg-red-50 text-red-600', 'NĐ': 'bg-orange-50 text-orange-600', 'TT': 'bg-purple-50 text-purple-600', 'QĐ': 'bg-yellow-50 text-yellow-700', 'NQ': 'bg-teal-50 text-teal-600' };
+    return `<span class="badge ${colors[loai] || 'bg-gray-100 text-gray-600'}">${escHtml(loai || '')}</span>`;
+}
+
+function getStatusBadge(status) {
+    if (!status) return '';
+    const isActive = status.toLowerCase().includes('còn hiệu lực');
+    return `<span class="badge ${isActive ? 'bg-green-50 text-green-600' : 'bg-gray-100 text-gray-500'}">${isActive ? 'Còn HL' : 'Hết HL'}</span>`;
+}
+
+function renderPagination() {
+    const el = document.getElementById('pagination');
+    const totalPages = Math.ceil(searchTotal / PAGE_SIZE);
+    if (totalPages <= 1) { el.classList.add('hidden'); return; }
+    el.classList.remove('hidden');
+    document.getElementById('pageInfo').textContent = `${searchPage + 1} / ${totalPages}`;
+    document.getElementById('btnPrev').disabled = searchPage === 0;
+    document.getElementById('btnNext').disabled = searchPage >= totalPages - 1;
+}
+
+function prevPage() { if (searchPage > 0) { searchPage--; doSearch(); } }
+function nextPage() { searchPage++; doSearch(); }
+
+// ── Detail Modal ──
+async function openDetail(soHieu) {
+    try {
+        currentDoc = await api(`/api/documents/${encodeURIComponent(soHieu)}`);
+        renderModal();
+        document.getElementById('detailModal').classList.remove('hidden');
+    } catch (err) {
+        toast('Lỗi: ' + err.message, 'error');
+    }
+}
+
+function closeModal() {
+    document.getElementById('detailModal').classList.add('hidden');
+    currentDoc = null;
+}
+
+function renderModal() {
+    const d = currentDoc;
+    document.getElementById('modalSoHieu').textContent = d.so_hieu;
+    document.getElementById('modalTen').textContent = d.ten;
+
+    // TVPL link
+    const tvplEl = document.getElementById('modalTvpl');
+    if (d.link_tvpl) { tvplEl.href = d.link_tvpl; tvplEl.classList.remove('hidden'); }
+    else tvplEl.classList.add('hidden');
+
+    // Info tab
+    document.getElementById('modalTabInfo').innerHTML = `
+        <div class="grid grid-cols-2 gap-3 text-sm">
+            <div><span class="text-gray-400">Loại:</span> <span class="font-medium">${escHtml(d.loai)}</span></div>
+            <div><span class="text-gray-400">Cơ quan:</span> <span class="font-medium">${escHtml(d.co_quan || '-')}</span></div>
+            <div><span class="text-gray-400">Ngày ban hành:</span> <span class="font-medium">${d.ngay_ban_hanh || '-'}</span></div>
+            <div><span class="text-gray-400">Hiệu lực từ:</span> <span class="font-medium">${d.hieu_luc_tu || '-'}</span></div>
+            <div><span class="text-gray-400">Tình trạng:</span> <span class="font-medium">${escHtml(d.tinh_trang || '-')}</span></div>
+            <div><span class="text-gray-400">Sắc thuế:</span> <span class="font-medium">${(d.sac_thue || []).join(', ') || '-'}</span></div>
+        </div>
+        ${d.tom_tat ? `<div class="mt-4"><span class="text-gray-400 text-sm">Tóm tắt:</span><p class="text-sm mt-1">${escHtml(d.tom_tat)}</p></div>` : ''}
+        ${d.luu_y ? `<div class="mt-3 p-3 bg-yellow-50 rounded-lg text-sm"><strong>Lưu ý:</strong> ${escHtml(d.luu_y)}</div>` : ''}
+        ${(d.tu_khoa && d.tu_khoa.length) ? `<div class="mt-3 flex flex-wrap gap-1">${d.tu_khoa.map(k => `<span class="badge bg-gray-100 text-gray-600">${escHtml(k)}</span>`).join('')}</div>` : ''}
+    `;
+
+    // Content tab
+    document.getElementById('modalTabContent').innerHTML = d.noi_dung
+        ? `<pre class="whitespace-pre-wrap text-sm text-gray-700 font-sans">${escHtml(d.noi_dung)}</pre>`
+        : '<p class="text-gray-400 text-sm">Chưa có nội dung toàn văn. Sử dụng chức năng Crawl trong Admin để lấy nội dung.</p>';
+
+    switchModalTab('info');
+    loadRelations(d.so_hieu);
+}
+
+function switchModalTab(tab) {
+    ['info', 'content', 'relations'].forEach(t => {
+        document.getElementById(`modalTab${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('hidden', t !== tab);
+        document.getElementById(`mt${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('tab-active', t === tab);
+        document.getElementById(`mt${t.charAt(0).toUpperCase()+t.slice(1)}`).classList.toggle('text-gray-500', t !== tab);
+    });
+}
+
+async function loadRelations(soHieu) {
+    try {
+        const data = await api(`/api/documents/${encodeURIComponent(soHieu)}/relations`);
+        let html = '';
+        if (data.thay_the_boi) {
+            html += `<div class="mb-3"><span class="text-xs text-gray-400 font-medium">Thay thế bởi:</span><div class="mt-1 p-2 bg-red-50 rounded-lg text-sm cursor-pointer hover:bg-red-100" onclick="openDetail('${escHtml(data.thay_the_boi.so_hieu)}')">${escHtml(data.thay_the_boi.so_hieu)} — ${escHtml(data.thay_the_boi.ten)}</div></div>`;
+        }
+        if (data.sua_doi_boi?.length) {
+            html += '<div class="mb-3"><span class="text-xs text-gray-400 font-medium">Sửa đổi bởi:</span>';
+            data.sua_doi_boi.forEach(r => {
+                html += `<div class="mt-1 p-2 bg-orange-50 rounded-lg text-sm cursor-pointer hover:bg-orange-100" onclick="openDetail('${escHtml(r.so_hieu)}')">${escHtml(r.so_hieu)} — ${escHtml(r.ten)}</div>`;
+            });
+            html += '</div>';
+        }
+        if (data.duoc_tham_chieu_boi?.length) {
+            html += '<div class="mb-3"><span class="text-xs text-gray-400 font-medium">Được tham chiếu bởi:</span>';
+            data.duoc_tham_chieu_boi.forEach(r => {
+                html += `<div class="mt-1 p-2 bg-blue-50 rounded-lg text-sm cursor-pointer hover:bg-blue-100" onclick="openDetail('${escHtml(r.so_hieu)}')">${escHtml(r.so_hieu)} — ${escHtml(r.ten)}</div>`;
+            });
+            html += '</div>';
+        }
+        if (!html) html = '<p class="text-gray-400 text-sm">Không tìm thấy văn bản liên quan.</p>';
+        document.getElementById('modalTabRelations').innerHTML = html;
+    } catch {
+        document.getElementById('modalTabRelations').innerHTML = '<p class="text-gray-400 text-sm">Không thể tải thông tin liên quan.</p>';
+    }
+}
+
+function copyLink() {
+    if (!currentDoc) return;
+    const url = `${location.origin}/#doc=${encodeURIComponent(currentDoc.so_hieu)}`;
+    navigator.clipboard.writeText(url).then(() => toast('Đã copy link!'));
+}
+
+async function exportDocWord() {
+    if (!currentDoc) return;
+    try {
+        const res = await fetch('/api/export/word', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ type: 'document', data: currentDoc })
+        });
+        const blob = await res.blob();
+        downloadBlob(blob, `${currentDoc.so_hieu.replace(/\//g, '-')}.docx`);
+        toast('Đã xuất Word!');
+    } catch (err) { toast('Lỗi xuất Word: ' + err.message, 'error'); }
+}
+
+// ── Chat ──
+let chatStreaming = false;
+
+async function sendChat() {
+    if (chatStreaming) return;
+    const input = document.getElementById('chatInput');
+    const question = input.value.trim();
+    if (!question) return;
+    input.value = '';
+
+    // Add user message
+    addChatMessage(question, 'user');
+
+    // Add streaming AI message
+    const aiEl = addChatMessage('', 'ai');
+    const contentEl = aiEl.querySelector('.msg-content');
+
+    chatStreaming = true;
+    document.getElementById('btnSendChat').disabled = true;
+
+    let fullResponse = '';
+
+    try {
+        const res = await fetch('/api/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ question })
+        });
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split('\n');
+            buffer = lines.pop() || '';
+
+            for (const line of lines) {
+                if (line.startsWith('data: ')) {
+                    const data = line.slice(6).trim();
+                    if (data === '[DONE]') break;
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (parsed.text) {
+                            fullResponse += parsed.text;
+                            contentEl.innerHTML = renderMarkdown(fullResponse);
+                            contentEl.closest('.overflow-y-auto')?.scrollTo(0, 9999);
+                        }
+                    } catch {}
+                }
+            }
+        }
+
+        // Add export button
+        const exportBtn = document.createElement('button');
+        exportBtn.className = 'mt-2 text-xs text-primary hover:underline';
+        exportBtn.textContent = '📄 Xuất Word';
+        exportBtn.onclick = () => exportChatWord(question, fullResponse);
+        contentEl.appendChild(exportBtn);
+
+    } catch (err) {
+        contentEl.textContent = 'Lỗi: ' + err.message;
+    } finally {
+        chatStreaming = false;
+        document.getElementById('btnSendChat').disabled = false;
+        document.getElementById('chatMessages').scrollTo(0, 999999);
+    }
+}
+
+function addChatMessage(text, role) {
+    const container = document.getElementById('chatMessages');
+    const div = document.createElement('div');
+    div.className = 'chat-msg flex gap-3' + (role === 'user' ? ' justify-end' : '');
+
+    if (role === 'user') {
+        div.innerHTML = `<div class="bg-primary text-white rounded-xl rounded-tr-none p-3 text-sm max-w-[85%]">${escHtml(text)}</div>`;
+    } else {
+        div.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
+                <svg class="w-4 h-4 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/></svg>
+            </div>
+            <div class="bg-gray-50 rounded-xl rounded-tl-none p-3 text-sm text-gray-700 max-w-[85%] msg-content markdown">${text ? renderMarkdown(text) : '<span class="loader inline-block"></span>'}</div>`;
+    }
+    container.appendChild(div);
+    container.scrollTo(0, 999999);
+    return div;
+}
+
+async function exportChatWord(question, answer) {
+    try {
+        const res = await fetch('/api/export/word', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ type: 'chat_answer', data: { question, answer } })
+        });
+        const blob = await res.blob();
+        downloadBlob(blob, 'viettax-chat.docx');
+        toast('Đã xuất Word!');
+    } catch (err) { toast('Lỗi: ' + err.message, 'error'); }
+}
+
+// ── Admin ──
+async function loadAdmin() {
+    try {
+        const [stats, users] = await Promise.all([api('/api/admin/stats'), api('/api/admin/users')]);
+        document.getElementById('statDocs').textContent = stats.documents;
+        document.getElementById('statCV').textContent = stats.cong_van;
+        document.getElementById('statUsers').textContent = stats.users;
+
+        document.getElementById('usersTableBody').innerHTML = users.map(u => `
+            <tr class="border-b"><td class="py-2 pr-4">${escHtml(u.username)}</td><td class="py-2 pr-4">${escHtml(u.email)}</td>
+            <td class="py-2 pr-4"><span class="badge ${u.role === 'admin' ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'}">${u.role}</span></td>
+            <td class="py-2 text-gray-400">${u.created_at ? new Date(u.created_at).toLocaleDateString('vi-VN') : '-'}</td></tr>
+        `).join('');
+    } catch (err) { toast('Lỗi: ' + err.message, 'error'); }
+}
+
+async function createUser() {
+    const data = {
+        username: document.getElementById('newUsername').value,
+        email: document.getElementById('newEmail').value,
+        password: document.getElementById('newPassword').value,
+        role: document.getElementById('newRole').value
+    };
+    if (!data.username || !data.email || !data.password) return toast('Vui lòng điền đầy đủ', 'error');
+    try {
+        await api('/api/admin/users', { method: 'POST', body: JSON.stringify(data) });
+        toast('Đã tạo user!');
+        loadAdmin();
+        document.getElementById('newUsername').value = '';
+        document.getElementById('newEmail').value = '';
+        document.getElementById('newPassword').value = '';
+    } catch (err) { toast('Lỗi: ' + err.message, 'error'); }
+}
+
+async function runCrawl() {
+    const loai = document.getElementById('crawlLoai').value;
+    const pages = document.getElementById('crawlPages').value;
+    const btn = document.getElementById('btnCrawl');
+    const resEl = document.getElementById('crawlResult');
+    btn.disabled = true; btn.textContent = 'Đang crawl...';
+    resEl.classList.remove('hidden'); resEl.textContent = 'Đang crawl, vui lòng chờ...';
+
+    try {
+        const data = await api(`/api/admin/crawl?loai=${encodeURIComponent(loai)}&max_pages=${pages}`, { method: 'POST' });
+        resEl.textContent = `Hoàn tất! Crawl: ${data.crawled}, Import mới: ${data.imported}`;
+        loadAdmin();
+    } catch (err) {
+        resEl.textContent = 'Lỗi: ' + err.message;
+    } finally {
+        btn.disabled = false; btn.textContent = 'Bắt đầu crawl';
+    }
+}
+
+// ── Utilities ──
+function escHtml(s) {
+    if (!s) return '';
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function renderMarkdown(text) {
+    return text
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/^## (.+)$/gm, '<h2>$1</h2>')
+        .replace(/^### (.+)$/gm, '<h3>$1</h3>')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/^- (.+)$/gm, '<li>$1</li>')
+        .replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>')
+        .replace(/\n\n/g, '</p><p>')
+        .replace(/\n/g, '<br>');
+}
+
+function toast(msg, type = 'success') {
+    const el = document.createElement('div');
+    el.className = `toast px-4 py-2 rounded-lg text-sm font-medium shadow-lg ${type === 'error' ? 'bg-red-600 text-white' : 'bg-primary text-white'}`;
+    el.textContent = msg;
+    document.getElementById('toasts').appendChild(el);
+    setTimeout(() => el.remove(), 3000);
+}
+
+function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
+
+// ── Handle hash-based deep links ──
+window.addEventListener('hashchange', () => {
+    const hash = location.hash;
+    if (hash.startsWith('#doc=')) {
+        openDetail(decodeURIComponent(hash.slice(5)));
+    }
+});
+if (location.hash.startsWith('#doc=')) {
+    setTimeout(() => openDetail(decodeURIComponent(location.hash.slice(5))), 500);
+}
+</script>
+</body>
+</html>
